@@ -2,12 +2,14 @@ import pygame
 import numpy as np
 from numpy.linalg import inv
 
+# Config
 SCALE_FACTOR = 480
-PREDICTIONS_PER_SECOND = 8
 WINDOW_WIDTH = 480
 WINDOW_HEIGHT = 480
 
-np.random.seed(42)
+PREDICTIONS_PER_SECOND = 8
+
+np.random.seed(42) # fix for reproducution
 
 # pygame setup
 pygame.init()
@@ -16,7 +18,6 @@ screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT)) # the window
 world_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA) # the main drawing surface
 trajectory_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA) # for drawing trajectory of the robot
 uncertainty_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA) # for drawing uncertainty ellipses
-last_position = np.zeros((2, 1)) # track the last position for drawing the trajectory
 
 clock = pygame.time.Clock()
 running = True
@@ -26,30 +27,31 @@ offset = pygame.Vector2(0, 0) # offset to position the world on the screen
 
 # robot
 pos = np.zeros((2, 1))
-
+last_position = pos.copy() # for trajectory visualization
 r = .1 # wheel radius (and also the speed in this case)
 
+# Motion model
 A = np.identity(2) # transition matrix
 B = r/2 * np.identity(2) # motion matrix
-u_r = 1
-u_l = 1
+u_r = u_l = 1 # chosen control inputs
 u = np.array([[u_r + u_l], [u_r + u_l]]) # control vector
 
 # Prediction (i.e. odometry)
 pos_pred = np.zeros((2, 1))
-P_pred = np.zeros((2, 2))
-P = np.zeros((2, 2)) # prediction (position) covariance
+last_pos_pred = pos_pred.copy() # for trajectory visualization
+P_pred = np.zeros((2, 2)) # prediction covariance
 sd_w_x = .1
 sd_w_y = .15
-Q = np.array([[sd_w_x**2, 0], [0, sd_w_y**2]]) # process covariance
+R = np.array([[sd_w_x, 0], [0, sd_w_y]]) # process covariance
 
 # Update (i.e. measurement)
 pos_corrected = np.zeros((2, 1))
-P_corrected = np.zeros((2, 2))
+last_pos_corrected = pos_corrected.copy() # for trajectory visualization
+P_corrected = np.zeros((2, 2)) # measurement covariance
 C = np.array([[1, 0], [0, 2]]) # observation matrix
 sd_r_x = .05
 sd_r_y = .075
-R = np.array([[sd_r_x**2, 0], [0, sd_r_y**2]]) # measurement covariance
+Q = np.array([[sd_r_x, 0], [0, sd_r_y]]) # measurement covariance
 
 # Timers
 prediction_timer_delay = round(1000/PREDICTIONS_PER_SECOND)
@@ -93,29 +95,27 @@ while running:
             # print('prediction')
             vel_pred = B @ u / PREDICTIONS_PER_SECOND
 
-            # store motion prediction for visualization
-            P_pred = A @ P_pred @ A.T + Q # (3.120a) modified for multiple predictions
+            # store for visualization
+            P_pred = A @ P_pred @ A.T + R # (3.120a) modified for multiple predictions
             pos_pred = A @ pos_pred + vel_pred # (3.120b) modified for multiple predictions
 
         elif event.type == MEASUREMENT_TIMER_EVENT:
             # print('measurement')
-            y = C @ pos
+            z = C @ pos
+            innovation = (z - C @ pos_pred)
+            K = P_pred @ C.T @ inv(C @ P_pred @ C.T + Q)
 
-            K = P_pred @ C.T @ inv(C @ P_pred @ C.T + R)
-
-            innovation = (y - C @ pos_pred)
-            # print(f'K: {K}')
-            # print(f'innovation: {innovation}')
-            
+            # store for visualization
             P_corrected = (np.identity(2) - K @ C) @ P_pred
             pos_corrected = pos_pred + K @ innovation
             
+            # pass on the measurement
             P_pred = P_corrected
             pos_pred = pos_corrected
 
-    # Simulate ground truth with noisy motion
-    vel = np.random.multivariate_normal((B @ u).flatten(), Q).reshape(-1, 1)
-    # vel = B @ u
+    # Simulate ground truth
+    vel = np.random.multivariate_normal((B @ u).flatten(), R).reshape(-1, 1) # with noisy motion
+    # vel = B @ u # with noiseless motion
     pos += vel * dt
 
     # Draw
@@ -123,18 +123,27 @@ while running:
     world_surface.fill('white')
     uncertainty_surface.fill((0, 0, 0, 0))
 
-    # Trajectory line
-    pygame.draw.line(trajectory_surface, 'lightblue', 
+    # Trajectory lines
+    pygame.draw.line(trajectory_surface, 'skyblue', 
         pygame.Vector2(*last_position) * SCALE_FACTOR + offset,
         pygame.Vector2(*pos) * SCALE_FACTOR + offset)
     last_position = pos.copy()
+
+    pygame.draw.line(trajectory_surface, 'lightgreen', 
+        pygame.Vector2(*last_pos_pred) * SCALE_FACTOR + offset,
+        pygame.Vector2(*pos_pred) * SCALE_FACTOR + offset)
+    last_pos_pred = pos_pred.copy()
+
+    pygame.draw.line(trajectory_surface, 'darksalmon', 
+        pygame.Vector2(*last_pos_corrected) * SCALE_FACTOR + offset,
+        pygame.Vector2(*pos_corrected) * SCALE_FACTOR + offset)
+    last_pos_corrected = pos_corrected.copy()
 
     # Ground truth
     pygame.draw.circle(world_surface, 'blue', pygame.Vector2(*pos) * SCALE_FACTOR + offset, 3, width=0)
 
     # Uncertainty
     draw_covariance_ellipse(pos_pred, P_pred, confidence=.95, color='green')
-    draw_covariance_ellipse(pos_pred, P_pred, confidence=.5, color='lightgreen')
     draw_covariance_ellipse(pos_corrected, P_corrected, confidence=.95, color='red')
 
     # blit and flip
