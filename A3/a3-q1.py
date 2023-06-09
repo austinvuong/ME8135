@@ -55,18 +55,18 @@ u_r = u_l = 1 # chosen control inputs
 control_vector = np.array([[u_r + u_l], [u_r + u_l]]) # control vector
 
 # Prediction (odometry)
-predicted = StateData(np.zeros((STATE_DIM, 1)), np.zeros((STATE_DIM, STATE_DIM)))
+prediction = StateData(np.zeros((STATE_DIM, 1)), np.zeros((STATE_DIM, STATE_DIM)))
 particles = np.zeros((NUMBER_OF_PARTICLES, STATE_DIM, 1)) # particles[n] gets you the n'th particle as a column vector
+
 sd_w_x = .1
 sd_w_y = .15
-prediction_covariance = np.array([[sd_w_x, 0], [0, sd_w_y]]) # process covariance
+process_covariance = np.array([[sd_w_x, 0], [0, sd_w_y]]) # process covariance
 
 # Update (measurement)
+measurement = StateData(np.zeros((2, 1)), np.zeros((STATE_DIM, STATE_DIM)))
 measurement_matrix = np.array([[1, 0], [0, 2]]) # observation matrix
-sd_r_x = .05
-sd_r_y = .075
-measurement_covariance = np.array([[sd_r_x, 0], [0, sd_r_y]]) # measurement covariance
-measurement = StateData(np.zeros((STATE_DIM, 1)), measurement_covariance)
+measurement.covariance[0, 0] = .05 # sd_r_x
+measurement.covariance[1, 1] = .075 # sd_r_y
 
 # Timers
 prediction_timer_delay = round(1000/PREDICTIONS_PER_SECOND)
@@ -121,23 +121,23 @@ while _running:
             # print('prediction')
             vel_pred = motion_matrix @ control_vector # B @ u
 
-            noise = np.random.multivariate_normal(np.zeros(STATE_DIM), prediction_covariance, size=NUMBER_OF_PARTICLES) 
+            noise = np.random.multivariate_normal(np.zeros(STATE_DIM), process_covariance, size=NUMBER_OF_PARTICLES) 
             noise = noise.reshape(NUMBER_OF_PARTICLES, STATE_DIM, 1)
 
             particles += (vel_pred + noise) / PREDICTIONS_PER_SECOND
 
             # compute for the uncertainty elipise
-            predicted.update_state(np.mean(particles, axis=0))
-            predicted.covariance = np.cov(np.reshape(particles, (len(particles), -1)), rowvar=False)
+            prediction.update_state(np.mean(particles, axis=0))
+            prediction.covariance = np.cov(np.reshape(particles, (len(particles), -1)), rowvar=False)
             
         elif event.type == MEASUREMENT_TIMER_EVENT:
             # # print('measurement')
             z = measurement_matrix @ ground_truth.state
-            d = np.linalg.norm(z - particles, axis=1) # distance between measurement and particles
+            d = np.linalg.norm(z - particles, axis=1) # distances between measurement and particles
 
-            w = multivariate_normal.pdf(d, None, measurement_covariance) # unnormalized weights
+            w = multivariate_normal.pdf(d, None, measurement.covariance) # unnormalized weights
             w /= np.sum(w, axis=0) # normalize
-            cdf = np.cumsum(w)
+            cdf = np.cumsum(w)  
             
             indexes = np.searchsorted(cdf, np.random.rand(NUMBER_OF_PARTICLES))
             particles = [particles[i] for i in indexes]
@@ -147,7 +147,7 @@ while _running:
 
     # Simulate ground truth
     vel = motion_matrix @ control_vector # with noiseless motion
-    vel = np.random.multivariate_normal(vel.flatten(), prediction_covariance).reshape(-1, 1) # with noisy motion
+    vel = np.random.multivariate_normal(vel.flatten(), process_covariance).reshape(-1, 1) # with noisy motion
     ground_truth.update_state(ground_truth.state + vel * _dt)
 
     # Draw
@@ -157,7 +157,7 @@ while _running:
 
     # Trajectory lines
     draw_trajectory_line(ground_truth, 'skyblue')
-    draw_trajectory_line(predicted, 'lightgreen')
+    draw_trajectory_line(prediction, 'lightgreen')
     draw_trajectory_line(measurement, 'darksalmon')
 
     # Particles
@@ -170,7 +170,7 @@ while _running:
     pygame.draw.circle(_world_surface, 'blue', pygame.Vector2(*ground_truth.state) * SCALE_FACTOR + _world_offset, 3, width=0)
 
     # Uncertainty
-    draw_covariance_ellipse(predicted, confidence=.95, color='green')
+    draw_covariance_ellipse(prediction, confidence=.95, color='green')
     draw_covariance_ellipse(measurement, confidence=.95, color='red')
 
     # blit and flip
