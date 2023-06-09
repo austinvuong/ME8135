@@ -135,7 +135,7 @@ while _running:
             z = measurement_matrix @ ground_truth.state
             d = np.linalg.norm(z - particles, axis=1) # distances between measurement and particles
 
-            w = multivariate_normal.pdf(d, None, measurement.covariance) # unnormalized weights
+            w = multivariate_normal.pdf(d) # unnormalized weights
             w /= np.sum(w, axis=0) # normalize
             cdf = np.cumsum(w)  
             
@@ -164,13 +164,13 @@ while _running:
     for p in particles:
         if p.min() < 0: # skip these particles to avoid the issue draws smearing across the surface
             continue
-        pygame.draw.circle(_world_surface, 'magenta', pygame.Vector2(*p) * SCALE_FACTOR + _world_offset, 1, width=0)
+        pygame.draw.circle(_world_surface, 'green', pygame.Vector2(*p) * SCALE_FACTOR + _world_offset, 1, width=0)
 
     # Ground truth
     pygame.draw.circle(_world_surface, 'blue', pygame.Vector2(*ground_truth.state) * SCALE_FACTOR + _world_offset, 3, width=0)
 
     # Uncertainty
-    draw_covariance_ellipse(prediction, confidence=.95, color='green')
+    # draw_covariance_ellipse(prediction, confidence=.95, color='green')
     draw_covariance_ellipse(measurement, confidence=.95, color='red')
 
     # blit and flip
