@@ -9,7 +9,7 @@ WINDOW_WIDTH = 480
 WINDOW_HEIGHT = 480
 
 PREDICTIONS_PER_SECOND = 8
-NUMBER_OF_PARTICLES = 30
+NUMBER_OF_PARTICLES = 1000
 
 STATE_DIM = 2
 
@@ -140,7 +140,7 @@ while _running:
             cdf = np.cumsum(w)  
             
             indexes = np.searchsorted(cdf, np.random.rand(NUMBER_OF_PARTICLES))
-            particles = [particles[i] for i in indexes]
+            particles = np.array([particles[i] for i in indexes])
 
             # for the uncertainty elipise 
             measurement.update_state(z)
