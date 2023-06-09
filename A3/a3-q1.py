@@ -4,12 +4,14 @@ from scipy.stats import multivariate_normal
 from dataclasses import dataclass
 
 # Config
-SCALE_FACTOR = 480*2.
+SCALE_FACTOR = 480*1.
 WINDOW_WIDTH = 480
 WINDOW_HEIGHT = 480
 
 PREDICTIONS_PER_SECOND = 8
 NUMBER_OF_PARTICLES = 30
+
+STATE_DIM = 2
 
 np.random.seed(42) # fix for reproducution
 
@@ -43,18 +45,18 @@ class StateData:
         self.state = new_state
 
 # robot
-ground_truth = StateData(np.zeros((2, 1)), np.zeros((2, 2)))
+ground_truth = StateData(np.zeros((STATE_DIM, 1)), np.zeros((STATE_DIM, STATE_DIM)))
 r = .1 # wheel radius (and also the speed in this case)
 
 # Motion model
-transition_matrix = np.identity(2) # transition matrix
-motion_matrix = r/2 * np.identity(2) # motion matrix
+transition_matrix = np.identity(STATE_DIM) # transition matrix
+motion_matrix = r/2 * np.identity(STATE_DIM) # motion matrix
 u_r = u_l = 1 # chosen control inputs
 control_vector = np.array([[u_r + u_l], [u_r + u_l]]) # control vector
 
 # Prediction (odometry)
-predicted = StateData(np.zeros((2, 1)), np.zeros((2, 2)))
-particles = np.zeros((NUMBER_OF_PARTICLES, 2, 1)) # particles[n] gets you the n'th particle as a column vector
+predicted = StateData(np.zeros((STATE_DIM, 1)), np.zeros((STATE_DIM, STATE_DIM)))
+particles = np.zeros((NUMBER_OF_PARTICLES, STATE_DIM, 1)) # particles[n] gets you the n'th particle as a column vector
 sd_w_x = .1
 sd_w_y = .15
 prediction_covariance = np.array([[sd_w_x, 0], [0, sd_w_y]]) # process covariance
@@ -64,7 +66,7 @@ measurement_matrix = np.array([[1, 0], [0, 2]]) # observation matrix
 sd_r_x = .05
 sd_r_y = .075
 measurement_covariance = np.array([[sd_r_x, 0], [0, sd_r_y]]) # measurement covariance
-measurement = StateData(np.zeros((2, 1)), measurement_covariance)
+measurement = StateData(np.zeros((STATE_DIM, 1)), measurement_covariance)
 
 # Timers
 prediction_timer_delay = round(1000/PREDICTIONS_PER_SECOND)
@@ -97,7 +99,7 @@ def draw_covariance_ellipse(state_data: StateData, confidence=.95, color='magent
     minor = 2 * np.sqrt(np.min(eigenvalues) * SCALE_FACTOR) * s
     
     max_eigenvalue_index = np.argmax(eigenvalues)
-    angle = np.degrees(np.arctan2(eigenvectors[max_eigenvalue_index, 1], eigenvectors[max_eigenvalue_index, 0]))
+    angle = -np.degrees(np.arctan2(eigenvectors[max_eigenvalue_index, 1], eigenvectors[max_eigenvalue_index, 0]))
     
     rect = (state_data.state[0, 0] * SCALE_FACTOR - major/2 + _world_offset.x, 
             state_data.state[1, 0] * SCALE_FACTOR - minor/2 + _world_offset.y, 
@@ -119,8 +121,8 @@ while _running:
             # print('prediction')
             vel_pred = motion_matrix @ control_vector # B @ u
 
-            noise = np.random.multivariate_normal(np.zeros(2), prediction_covariance, size=NUMBER_OF_PARTICLES) 
-            noise = noise.reshape(NUMBER_OF_PARTICLES, 2, 1)
+            noise = np.random.multivariate_normal(np.zeros(STATE_DIM), prediction_covariance, size=NUMBER_OF_PARTICLES) 
+            noise = noise.reshape(NUMBER_OF_PARTICLES, STATE_DIM, 1)
 
             particles += (vel_pred + noise) / PREDICTIONS_PER_SECOND
 
@@ -145,8 +147,8 @@ while _running:
 
     # Simulate ground truth
     vel = motion_matrix @ control_vector # with noiseless motion
-    vel2 = np.random.multivariate_normal(vel.flatten(), prediction_covariance).reshape(-1, 1) # with noisy motion
-    ground_truth.update_state(ground_truth.state + vel2 * _dt)
+    vel = np.random.multivariate_normal(vel.flatten(), prediction_covariance).reshape(-1, 1) # with noisy motion
+    ground_truth.update_state(ground_truth.state + vel * _dt)
 
     # Draw
     # Background
