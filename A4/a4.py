@@ -86,6 +86,10 @@ outliers_index = np.setdiff1d(np.arange(len(points_source)), inliers_indexes)
 # Normalize and print the transform for the report
 H = H/H[2, 2]
 print(H)
+# Pasted for easy access (it's consistent)
+# [[0.70917868 0.43442468 0.129146  ] 
+#  [0.28310411 0.17443173 0.42877658] 
+#  [0.15491603 0.01687054 1.        ]]
 
 # Plot inliers
 plt.scatter(points_source[inliers_indexes, 0], points_source[inliers_indexes, 1], color='blue', marker='o')
