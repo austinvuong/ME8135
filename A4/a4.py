@@ -63,7 +63,7 @@ def apply_homography(H, points):
 # note: if min_points is too large this will not terminiate
 # for the assigment this is fine
 def ransac_homography(points_source, points_destination, threshold=0.005, min_points=10):
-   T = np.zeros(3)
+   H = np.zeros(3)
    inliers_indexes = []
 
    while len(inliers_indexes) < min_points:
@@ -84,8 +84,8 @@ H, inliers_indexes = ransac_homography(points_source, points_destination)
 outliers_index = np.setdiff1d(np.arange(len(points_source)), inliers_indexes)
 
 # Normalize and print the transform for the report
-H = H/H[2, 2]
-print(H)
+# H = H/H[2, 2]
+# print(H)
 # Pasted for easy access (it's consistent)
 # [[0.70917868 0.43442468 0.129146  ] 
 #  [0.28310411 0.17443173 0.42877658] 
